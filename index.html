@@ -1,0 +1,523 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #fff; font-family: 'Geist', -apple-system, sans-serif; padding: 28px; color: #1a1a1a; }
+
+  .top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+  .header { font-size: 11px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: #bbb; }
+
+  /* Collapse toggle */
+  .collapse-btn {
+    font-size: 11px; font-weight: 500; color: #999; background: #fafafa;
+    border: 1.5px solid #ebebeb; border-radius: 6px; padding: 5px 12px;
+    cursor: pointer; letter-spacing: 0.04em; transition: all 0.15s;
+  }
+  .collapse-btn:hover { background: #f3f3f3; color: #555; }
+
+  /* Status legend */
+  .status-legend { display: flex; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #999; cursor: pointer; padding: 4px 8px; border-radius: 5px; transition: background 0.15s; user-select: none; }
+  .legend-item:hover { background: #f5f5f5; }
+  .legend-item.dimmed { opacity: 0.35; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dot-done     { background: #2daa7a; }
+  .dot-progress { background: #f59e0b; }
+  .dot-blocked  { background: #ef4444; }
+  .dot-todo     { background: #d1d5db; }
+
+  .canvas { position: relative; width: 580px; }
+
+  /* NODE */
+  .node {
+    border-radius: 8px; padding: 11px 14px 11px 12px;
+    display: inline-flex; flex-direction: column; gap: 2px;
+    cursor: pointer; opacity: 0; animation: fadeUp 0.4s ease forwards;
+    transition: box-shadow 0.2s, transform 0.2s, opacity 0.3s;
+    position: relative;
+  }
+  .node:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.1); }
+  .node.filtered-out { opacity: 0.15 !important; pointer-events: none; }
+
+  .node-purple { background: #f3f2ff; border: 1.5px solid #d4d0f9; }
+  .node-blue   { background: #eff6ff; border: 1.5px solid #c3d9fb; }
+  .node-teal   { background: #f0faf6; border: 1.5px solid #b6e8d5; }
+  .node-orange { background: #fff7f0; border: 1.5px solid #fdd5b0; }
+  .node-gray   { background: #fafafa; border: 1.5px solid #e8e8e8; }
+  .node-pink   { background: #fff0f5; border: 1.5px solid #f9c6d8; }
+
+  .node-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .node-left { display: flex; flex-direction: column; gap: 2px; }
+  .node-tag { font-size: 9.5px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 1px; }
+  .tag-purple{color:#8b83e8} .tag-blue{color:#5a9cf0} .tag-teal{color:#2daa7a}
+  .tag-orange{color:#e88a3a} .tag-gray{color:#999} .tag-pink{color:#e0608a}
+  .node-title { font-size: 13px; font-weight: 600; color: #1a1a1a; letter-spacing: -0.1px; }
+  .node-sub { font-size: 10.5px; color: #999; margin-top: 1px; }
+
+  /* Status badge */
+  .status-badge {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 10px; font-weight: 500; padding: 3px 8px;
+    border-radius: 99px; white-space: nowrap; flex-shrink: 0;
+    cursor: pointer; transition: filter 0.15s;
+    border: 1.5px solid transparent;
+  }
+  .status-badge:hover { filter: brightness(0.95); }
+  .badge-done     { background: #e8faf3; color: #1a9e6a; border-color: #b6e8d5; }
+  .badge-progress { background: #fffbeb; color: #d97706; border-color: #fde68a; }
+  .badge-blocked  { background: #fff1f1; color: #dc2626; border-color: #fecaca; }
+  .badge-todo     { background: #f9fafb; color: #9ca3af; border-color: #e5e7eb; }
+
+  /* Expand panel */
+  .expand-panel {
+    max-height: 0; overflow: hidden;
+    transition: max-height 0.3s ease, padding 0.3s ease;
+    border-top: 0px solid transparent;
+  }
+  .expand-panel.open {
+    max-height: 200px;
+    border-top: 1px solid rgba(0,0,0,0.06);
+    padding-top: 10px;
+    margin-top: 10px;
+  }
+  .panel-notes { font-size: 11.5px; color: #666; line-height: 1.6; }
+  .panel-meta { display: flex; gap: 16px; margin-top: 8px; flex-wrap: wrap; }
+  .panel-meta-item { font-size: 10px; color: #bbb; }
+  .panel-meta-item span { color: #888; font-weight: 500; }
+
+  .chevron { font-size: 10px; color: #bbb; margin-left: 4px; transition: transform 0.25s; display: inline-block; }
+  .node.expanded .chevron { transform: rotate(180deg); }
+
+  /* Tooltip */
+  .tooltip {
+    position: fixed; background: #1a1a1a; color: #fff;
+    font-size: 11px; padding: 6px 10px; border-radius: 6px;
+    pointer-events: none; opacity: 0; transition: opacity 0.15s;
+    max-width: 200px; line-height: 1.5; z-index: 999; white-space: normal;
+  }
+  .tooltip.visible { opacity: 1; }
+
+  /* Status cycle dropdown */
+  .status-menu {
+    position: absolute; top: 40px; right: 12px;
+    background: #fff; border: 1.5px solid #ebebeb; border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12); z-index: 100;
+    overflow: hidden; display: none; min-width: 130px;
+  }
+  .status-menu.open { display: block; }
+  .status-option {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; font-size: 12px; cursor: pointer;
+    transition: background 0.12s; color: #444;
+  }
+  .status-option:hover { background: #f5f5f5; }
+
+  .row { display: flex; position: relative; }
+  .row-center { justify-content: center; }
+  .row-split  { justify-content: space-between; align-items: flex-start; }
+  .vspace { position: relative; height: 44px; width: 100%; }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .d1{animation-delay:.05s} .d2{animation-delay:.12s} .d3{animation-delay:.2s}
+  .d4{animation-delay:.27s} .d5{animation-delay:.34s} .d6{animation-delay:.41s}
+  .d7{animation-delay:.48s} .d8{animation-delay:.55s}
+
+  .divider { height: 1px; background: #f2f2f2; margin-top: 24px; }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <div class="header">System Architecture — RAG Pipeline</div>
+  <button class="collapse-btn" id="collapse-btn" onclick="toggleAll()">Collapse All</button>
+</div>
+
+<div class="status-legend" id="status-legend">
+  <div class="legend-item" onclick="filterStatus('done')" data-filter="done">
+    <div class="status-dot dot-done"></div> Complete
+  </div>
+  <div class="legend-item" onclick="filterStatus('progress')" data-filter="progress">
+    <div class="status-dot dot-progress"></div> In Progress
+  </div>
+  <div class="legend-item" onclick="filterStatus('blocked')" data-filter="blocked">
+    <div class="status-dot dot-blocked"></div> Blocked
+  </div>
+  <div class="legend-item" onclick="filterStatus('todo')" data-filter="todo">
+    <div class="status-dot dot-todo"></div> To Do
+  </div>
+</div>
+
+<div class="canvas" id="canvas">
+  <!-- Agents -->
+  <div class="row row-center">
+    <div class="node node-purple d1" id="n-agents" style="width:260px;" onclick="toggleNode(event,'n-agents')" data-status="done" data-tooltip="Top-level consumers of the RAG system">
+      <div class="node-header">
+        <div class="node-left">
+          <span class="node-tag tag-purple">Consumers</span>
+          <span class="node-title">Agents <span class="chevron">▾</span></span>
+          <span class="node-sub">Regulation · Financing · Siting</span>
+        </div>
+        <div class="status-badge badge-done" onclick="openMenu(event,'n-agents')">
+          <div class="status-dot dot-done"></div> Complete
+        </div>
+      </div>
+      <div class="expand-panel">
+        <div class="panel-notes">Specialized AI agents consuming the RAG pipeline output. Each agent handles a specific regulatory or financing domain.</div>
+        <div class="panel-meta">
+          <div class="panel-meta-item">Owner: <span>AI Team</span></div>
+          <div class="panel-meta-item">Updated: <span>Today</span></div>
+        </div>
+      </div>
+      <div class="status-menu" id="menu-n-agents"></div>
+    </div>
+  </div>
+  <div class="vspace"><svg></svg></div>
+
+  <!-- Dashboard -->
+  <div class="row row-center">
+    <div class="node node-blue d2" id="n-dash" style="width:220px;" onclick="toggleNode(event,'n-dash')" data-status="progress" data-tooltip="Main user-facing interface for querying the system">
+      <div class="node-header">
+        <div class="node-left">
+          <span class="node-tag tag-blue">Interface</span>
+          <span class="node-title">Dashboard UI <span class="chevron">▾</span></span>
+        </div>
+        <div class="status-badge badge-progress" onclick="openMenu(event,'n-dash')">
+          <div class="status-dot dot-progress"></div> In Progress
+        </div>
+      </div>
+      <div class="expand-panel">
+        <div class="panel-notes">React-based dashboard for querying, viewing results, and managing agent tasks. Auth and search views complete; export view pending.</div>
+        <div class="panel-meta">
+          <div class="panel-meta-item">Owner: <span>Frontend</span></div>
+          <div class="panel-meta-item">ETA: <span>2 weeks</span></div>
+        </div>
+      </div>
+      <div class="status-menu" id="menu-n-dash"></div>
+    </div>
+  </div>
+  <div class="vspace"><svg></svg></div>
+
+  <!-- Ingestion + Feedback -->
+  <div class="row row-split">
+    <div class="node node-teal d3" id="n-ingest" style="width:256px;" onclick="toggleNode(event,'n-ingest')" data-status="done" data-tooltip="Document ingestion from regulatory and filing sources">
+      <div class="node-header">
+        <div class="node-left">
+          <span class="node-tag tag-teal">Data Sources</span>
+          <span class="node-title">Ingestion Sources <span class="chevron">▾</span></span>
+          <span class="node-sub">Regulations · Filings · Siting docs</span>
+        </div>
+        <div class="status-badge badge-done" onclick="openMenu(event,'n-ingest')">
+          <div class="status-dot dot-done"></div> Complete
+        </div>
+      </div>
+      <div class="expand-panel">
+        <div class="panel-notes">Pulls from 3 primary sources: federal/state regulation APIs, SEC filings scraper, and internal siting document store.</div>
+        <div class="panel-meta">
+          <div class="panel-meta-item">Sources: <span>3 active</span></div>
+          <div class="panel-meta-item">Refresh: <span>Daily</span></div>
+        </div>
+      </div>
+      <div class="status-menu" id="menu-n-ingest"></div>
+    </div>
+    <div class="node node-pink d4" id="n-feedback" style="width:200px;" onclick="toggleNode(event,'n-feedback')" data-status="todo" data-tooltip="Captures user feedback to grow the evaluation set">
+      <div class="node-header">
+        <div class="node-left">
+          <span class="node-tag tag-pink">Quality Loop</span>
+          <span class="node-title">Feedback + Eval <span class="chevron">▾</span></span>
+          <span class="node-sub">Eval set growth</span>
+        </div>
+        <div class="status-badge badge-todo" onclick="openMenu(event,'n-feedback')">
+          <div class="status-dot dot-todo"></div> To Do
+        </div>
+      </div>
+      <div class="expand-panel">
+        <div class="panel-notes">Thumbs up/down signals from agents feed into an eval set. Used to benchmark retrieval quality over time.</div>
+        <div class="panel-meta">
+          <div class="panel-meta-item">Eval size: <span>0 examples</span></div>
+        </div>
+      </div>
+      <div class="status-menu" id="menu-n-feedback"></div>
+    </div>
+  </div>
+  <div class="vspace"><svg></svg></div>
+
+  <!-- Parsing -->
+  <div class="row row-center">
+    <div class="node node-gray d5" id="n-parse" style="width:256px;" onclick="toggleNode(event,'n-parse')" data-status="done" data-tooltip="Splits raw documents into semantically coherent chunks">
+      <div class="node-header">
+        <div class="node-left">
+          <span class="node-tag tag-gray">Processing</span>
+          <span class="node-title">Parsing + Chunking <span class="chevron">▾</span></span>
+        </div>
+        <div class="status-badge badge-done" onclick="openMenu(event,'n-parse')">
+          <div class="status-dot dot-done"></div> Complete
+        </div>
+      </div>
+      <div class="expand-panel">
+        <div class="panel-notes">PDF/HTML parsing with Unstructured.io. Chunking uses recursive character splitter at 512 tokens with 64-token overlap.</div>
+        <div class="panel-meta">
+          <div class="panel-meta-item">Chunk size: <span>512 tokens</span></div>
+          <div class="panel-meta-item">Overlap: <span>64 tokens</span></div>
+        </div>
+      </div>
+      <div class="status-menu" id="menu-n-parse"></div>
+    </div>
+  </div>
+  <div class="vspace"><svg></svg></div>
+
+  <!-- Embedding -->
+  <div class="row row-center">
+    <div class="node node-orange d6" id="n-embed" style="width:256px;" onclick="toggleNode(event,'n-embed')" data-status="progress" data-tooltip="Converts chunks into dense vector representations">
+      <div class="node-header">
+        <div class="node-left">
+          <span class="node-tag tag-orange">ML Model</span>
+          <span class="node-title">Embedding Model <span class="chevron">▾</span></span>
+        </div>
+        <div class="status-badge badge-progress" onclick="openMenu(event,'n-embed')">
+          <div class="status-dot dot-progress"></div> In Progress
+        </div>
+      </div>
+      <div class="expand-panel">
+        <div class="panel-notes">Currently using text-embedding-3-small. Evaluating domain-specific fine-tuning for regulatory language. Benchmarking underway.</div>
+        <div class="panel-meta">
+          <div class="panel-meta-item">Model: <span>text-embedding-3-small</span></div>
+          <div class="panel-meta-item">Dims: <span>1536</span></div>
+        </div>
+      </div>
+      <div class="status-menu" id="menu-n-embed"></div>
+    </div>
+  </div>
+  <div class="vspace"><svg></svg></div>
+
+  <!-- Vector DB -->
+  <div class="row row-center">
+    <div class="node node-gray d7" id="n-vdb" style="width:220px;" onclick="toggleNode(event,'n-vdb')" data-status="blocked" data-tooltip="Stores and indexes all document embeddings">
+      <div class="node-header">
+        <div class="node-left">
+          <span class="node-tag tag-gray">Storage</span>
+          <span class="node-title">Vector DB <span class="chevron">▾</span></span>
+        </div>
+        <div class="status-badge badge-blocked" onclick="openMenu(event,'n-vdb')">
+          <div class="status-dot dot-blocked"></div> Blocked
+        </div>
+      </div>
+      <div class="expand-panel">
+        <div class="panel-notes">Pinecone provisioning blocked on security review. Temporary local Chroma instance in use. Production cutover pending approval.</div>
+        <div class="panel-meta">
+          <div class="panel-meta-item">Blocker: <span>Security review</span></div>
+          <div class="panel-meta-item">ETA: <span>Unknown</span></div>
+        </div>
+      </div>
+      <div class="status-menu" id="menu-n-vdb"></div>
+    </div>
+  </div>
+  <div class="vspace"><svg></svg></div>
+
+  <!-- Retriever -->
+  <div class="row row-center">
+    <div class="node node-purple d8" id="n-rag" style="width:240px;" onclick="toggleNode(event,'n-rag')" data-status="todo" data-tooltip="Retrieves top-k relevant chunks for agent queries">
+      <div class="node-header">
+        <div class="node-left">
+          <span class="node-tag tag-purple">Retrieval</span>
+          <span class="node-title">Retriever (RAG) <span class="chevron">▾</span></span>
+        </div>
+        <div class="status-badge badge-todo" onclick="openMenu(event,'n-rag')">
+          <div class="status-dot dot-todo"></div> To Do
+        </div>
+      </div>
+      <div class="expand-panel">
+        <div class="panel-notes">Will implement hybrid search (dense + BM25 sparse). Re-ranking with Cohere rerank API. Blocked on Vector DB availability.</div>
+        <div class="panel-meta">
+          <div class="panel-meta-item">Strategy: <span>Hybrid search</span></div>
+          <div class="panel-meta-item">Top-k: <span>8</span></div>
+        </div>
+      </div>
+      <div class="status-menu" id="menu-n-rag"></div>
+    </div>
+  </div>
+
+  <!-- Arrow SVG overlay -->
+  <svg id="main-svg" style="position:absolute;top:0;left:0;width:100%;pointer-events:none;overflow:visible;" height="100%">
+    <defs>
+      <marker id="arr-solid" markerWidth="7" markerHeight="7" refX="4" refY="3.5" orient="auto"><path d="M0,0.5 L0,6.5 L6,3.5 Z" fill="#aaa"/></marker>
+      <marker id="arr-dash"  markerWidth="7" markerHeight="7" refX="4" refY="3.5" orient="auto"><path d="M0,0.5 L0,6.5 L6,3.5 Z" fill="#ccc"/></marker>
+      <marker id="arr-purple" markerWidth="7" markerHeight="7" refX="4" refY="3.5" orient="auto"><path d="M0,0.5 L0,6.5 L6,3.5 Z" fill="#a09ae8"/></marker>
+      <marker id="arr-pink"  markerWidth="7" markerHeight="7" refX="4" refY="3.5" orient="auto"><path d="M0,0.5 L0,6.5 L6,3.5 Z" fill="#e0608a"/></marker>
+    </defs>
+  </svg>
+</div>
+
+<!-- Tooltip -->
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+const STATUSES = [
+  { key:'done',     label:'Complete',    badge:'badge-done',     dot:'dot-done' },
+  { key:'progress', label:'In Progress', badge:'badge-progress', dot:'dot-progress' },
+  { key:'blocked',  label:'Blocked',     badge:'badge-blocked',  dot:'dot-blocked' },
+  { key:'todo',     label:'To Do',       badge:'badge-todo',     dot:'dot-todo' },
+];
+
+let activeFilter = null;
+let allExpanded = false;
+
+// Build status menus
+document.querySelectorAll('.node').forEach(node => {
+  const id = node.id;
+  const menu = document.getElementById('menu-' + id);
+  STATUSES.forEach(s => {
+    const opt = document.createElement('div');
+    opt.className = 'status-option';
+    opt.innerHTML = `<div class="status-dot ${s.dot}"></div>${s.label}`;
+    opt.onclick = (e) => { e.stopPropagation(); setStatus(id, s.key); closeMenus(); };
+    menu.appendChild(opt);
+  });
+});
+
+function openMenu(e, nodeId) {
+  e.stopPropagation();
+  closeMenus();
+  document.getElementById('menu-' + nodeId).classList.add('open');
+  document.addEventListener('click', closeMenus, { once: true });
+}
+
+function closeMenus() {
+  document.querySelectorAll('.status-menu').forEach(m => m.classList.remove('open'));
+}
+
+function setStatus(nodeId, status) {
+  const node = document.getElementById(nodeId);
+  const s = STATUSES.find(x => x.key === status);
+  node.dataset.status = status;
+  const badge = node.querySelector('.status-badge');
+  badge.className = 'status-badge ' + s.badge;
+  badge.innerHTML = `<div class="status-dot ${s.dot}"></div>${s.label}`;
+  badge.onclick = (e) => { openMenu(e, nodeId); };
+  if (activeFilter) filterStatus(activeFilter); // re-apply filter
+}
+
+function toggleNode(e, nodeId) {
+  if (e.target.closest('.status-badge') || e.target.closest('.status-menu')) return;
+  const node = document.getElementById(nodeId);
+  const panel = node.querySelector('.expand-panel');
+  const isOpen = panel.classList.contains('open');
+  panel.classList.toggle('open', !isOpen);
+  node.classList.toggle('expanded', !isOpen);
+  setTimeout(redraw, 320);
+}
+
+function toggleAll() {
+  allExpanded = !allExpanded;
+  document.querySelectorAll('.expand-panel').forEach(p => p.classList.toggle('open', allExpanded));
+  document.querySelectorAll('.node').forEach(n => n.classList.toggle('expanded', allExpanded));
+  document.getElementById('collapse-btn').textContent = allExpanded ? 'Collapse All' : 'Expand All';
+  setTimeout(redraw, 320);
+}
+
+function filterStatus(status) {
+  const items = document.querySelectorAll('[data-filter]');
+  if (activeFilter === status) {
+    // clear filter
+    activeFilter = null;
+    items.forEach(i => i.classList.remove('dimmed'));
+    document.querySelectorAll('.node').forEach(n => n.classList.remove('filtered-out'));
+  } else {
+    activeFilter = status;
+    items.forEach(i => i.classList.toggle('dimmed', i.dataset.filter !== status));
+    document.querySelectorAll('.node').forEach(n => {
+      n.classList.toggle('filtered-out', n.dataset.status !== status);
+    });
+  }
+}
+
+// Tooltip
+document.querySelectorAll('.node').forEach(node => {
+  node.addEventListener('mouseenter', e => {
+    const tip = document.getElementById('tooltip');
+    tip.textContent = node.dataset.tooltip || '';
+    tip.classList.add('visible');
+  });
+  node.addEventListener('mousemove', e => {
+    const tip = document.getElementById('tooltip');
+    tip.style.left = (e.clientX + 12) + 'px';
+    tip.style.top  = (e.clientY - 28) + 'px';
+  });
+  node.addEventListener('mouseleave', () => {
+    document.getElementById('tooltip').classList.remove('visible');
+  });
+});
+
+// Arrow drawing
+const canvEl = () => document.getElementById('canvas').getBoundingClientRect();
+const cx  = el => { const r=el.getBoundingClientRect(),c=canvEl(); return r.left-c.left+r.width/2; };
+const top_ = el => { const r=el.getBoundingClientRect(),c=canvEl(); return r.top-c.top; };
+const bot_ = el => { const r=el.getBoundingClientRect(),c=canvEl(); return r.top-c.top+r.height; };
+const lft_ = el => { const r=el.getBoundingClientRect(),c=canvEl(); return r.left-c.left; };
+
+function ln(svg,x1,y1,x2,y2,color,dash,marker){
+  let el=document.createElementNS('http://www.w3.org/2000/svg','line');
+  el.setAttribute('x1',x1);el.setAttribute('y1',y1);el.setAttribute('x2',x2);el.setAttribute('y2',y2);
+  el.setAttribute('stroke',color);el.setAttribute('stroke-width','1.8');
+  if(dash)el.setAttribute('stroke-dasharray','5 4');
+  if(marker)el.setAttribute('marker-end',`url(#${marker})`);
+  svg.appendChild(el);
+}
+function pt(svg,d,color,dash,marker){
+  let el=document.createElementNS('http://www.w3.org/2000/svg','path');
+  el.setAttribute('d',d);el.setAttribute('fill','none');
+  el.setAttribute('stroke',color);el.setAttribute('stroke-width','1.8');
+  if(dash)el.setAttribute('stroke-dasharray','5 4');
+  if(marker)el.setAttribute('marker-end',`url(#${marker})`);
+  svg.appendChild(el);
+}
+
+function redraw() {
+  const svg = document.getElementById('main-svg');
+  while(svg.children.length > 1) svg.removeChild(svg.lastChild); // keep defs
+  svg.setAttribute('height', document.getElementById('canvas').offsetHeight);
+
+  const agents=document.getElementById('n-agents'), dash=document.getElementById('n-dash'),
+        ingest=document.getElementById('n-ingest'), fbk=document.getElementById('n-feedback'),
+        parse=document.getElementById('n-parse'), embed=document.getElementById('n-embed'),
+        vdb=document.getElementById('n-vdb'), rag=document.getElementById('n-rag');
+
+  ln(svg, cx(agents), bot_(agents), cx(dash), top_(dash)-6, '#a09ae8', false, 'arr-purple');
+
+  const sy = (bot_(dash)+top_(ingest))/2;
+  pt(svg,`M${cx(dash)} ${bot_(dash)} V${sy} H${cx(ingest)} V${top_(ingest)-6}`,'#ccc',true,'arr-dash');
+  pt(svg,`M${cx(dash)} ${bot_(dash)} V${sy} H${cx(fbk)} V${top_(fbk)-6}`,'#e0608a',true,'arr-pink');
+
+  const my = (bot_(ingest)+top_(parse))/2;
+  pt(svg,`M${cx(ingest)} ${bot_(ingest)} V${my} H${cx(parse)} V${top_(parse)-6}`,'#aaa',false,'arr-solid');
+  pt(svg,`M${cx(fbk)} ${bot_(fbk)} V${my} H${cx(parse)}`,'#ccc',true);
+
+  ln(svg, cx(parse), bot_(parse), cx(embed), top_(embed)-6, '#aaa', false, 'arr-solid');
+  ln(svg, cx(embed), bot_(embed), cx(vdb),   top_(vdb)-6,   '#aaa', false, 'arr-solid');
+  ln(svg, cx(vdb),   bot_(vdb),   cx(rag),   top_(rag)-6,   '#aaa', false, 'arr-solid');
+
+  // feedback loop arc
+  const lx=14, ay=top_(agents)+24, ry=bot_(rag)-16;
+  pt(svg,`M${lft_(rag)} ${ry} Q${lx} ${(ay+ry)/2} ${lft_(agents)} ${ay}`,'#ccc',true);
+  const poly=document.createElementNS('http://www.w3.org/2000/svg','polygon');
+  poly.setAttribute('points',`${lft_(agents)-2},${ay-6} ${lft_(agents)+6},${ay} ${lft_(agents)-2},${ay+6}`);
+  poly.setAttribute('fill','#ccc'); svg.appendChild(poly);
+  const txt=document.createElementNS('http://www.w3.org/2000/svg','text');
+  const midY=(ay+ry)/2;
+  txt.setAttribute('x',lx-8); txt.setAttribute('y',midY);
+  txt.setAttribute('fill','#ccc'); txt.setAttribute('font-size','9');
+  txt.setAttribute('font-family','Geist,sans-serif'); txt.setAttribute('letter-spacing','0.12em');
+  txt.setAttribute('text-anchor','middle'); txt.setAttribute('transform',`rotate(-90,${lx-8},${midY})`);
+  txt.textContent='FEEDBACK LOOP'; svg.appendChild(txt);
+}
+
+window.addEventListener('load', () => setTimeout(redraw, 150));
+</script>
+</body>
+</html>
